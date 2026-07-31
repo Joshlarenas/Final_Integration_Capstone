@@ -15,12 +15,11 @@ C: 4560.86
 D: 28292.77
 
 
-| Task |      Function     | Period (ms) | WCET measured (µs) | WCET + 30% margin (µs) | Deadline | Priority | Core |
-|------|---------- --------|------------:|-------------------:|----------------------:|---------:|---------:|-----:|
-| A    |ECG_Sample         | 10          |   37               |        48             | 10 ms    | 15       | 1    |
-| B    |Arrhythmia_Detector| 20          |   324              |        421            | 20 ms    | 10       | 1    |
-| C    |Alarm_Dispatch     | 40          |   4563             |        5932           | 40 ms    | 5        | 1    |
-| D    | Logging           | 100         |    28687           |        37293          | 100 ms   | 2        | 1    |
+| Task |      Function     | Period (ms) | WCET measured (µs) | WCET + 30% margin (µs) | Deadline | Priority | Core | <br>
+| A    |ECG_Sample         | 10          |   37               |        48             | 10 ms    | 15       | 1    |  <br>
+| B    |Arrhythmia_Detector| 20          |   324              |        421            | 20 ms    | 10       | 1    | <br>
+| C    |Alarm_Dispatch     | 40          |   4563             |        5932           | 40 ms    | 5        | 1    | <br>
+| D    | Logging           | 100         |    28687           |        37293          | 100 ms   | 2        | 1    | <br>
 
 ### Schedulability defense
 
