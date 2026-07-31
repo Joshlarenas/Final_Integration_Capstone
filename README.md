@@ -2,20 +2,8 @@
 
 # App 2 scaffold — multi-task scheduling
 
-Scaffold level: **~70% complete**.
 
-## What you implement
-
-1. **Theme rename** — replace `YOURTHEME` everywhere
-2. **Four task bodies** — see the comments in each `task_X()` for suggested workloads
-3. **WCET measurement** — fill in `task_d` to log all four WCETs to serial periodically
-4. **README defense** — see below
-
-## README defense (graded)
-
-Your README must include:
-
-### Task table (mandatory)
+### Task table with measured WCET
 
 Mean:
 
