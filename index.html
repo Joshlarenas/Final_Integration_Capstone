@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PULSE/OS &middot; Dual-Core Cardiac Monitor &middot; RTOS Capstone</title>
+<meta name="description" content="A rate-monotonic, dual-core ESP32 vitals monitor built for an RTOS/embedded systems capstone.">
+
+<style>
+  :root{
+    --navy: #131B38;
+    --navy-deep: #0B1026;
+    --panel: #1A2444;
+    --gold: #FFC904;
+    --heading: #6B4F09;
+    --green: #00E676;
+    --red: #B81829;
+    --ink: #E8ECF5;
+    --ink-dim: #8892B0;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --display: 'Space Grotesk', var(--sans);
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+
+  body{
+    margin:0;
+    background: var(--navy-deep);
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(0,230,118,0.06), transparent 40%),
+      radial-gradient(circle at 85% 60%, rgba(255,201,4,0.05), transparent 45%);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+  }
+
+  ::selection{ background: var(--green); color: var(--navy-deep); }
+
+  a{ color: var(--gold); }
+
+  /* ---------- scanline texture on panels ---------- */
+  .panel{
+    position: relative;
+    background: var(--panel);
+    border: 1px solid rgba(255,201,4,0.14);
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 20px 40px -20px rgba(0,0,0,0.6);
+  }
+  .panel::before{
+    content:"";
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(
+      to bottom, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px,
+      transparent 1px, transparent 3px
+    );
+    border-radius: inherit;
+    pointer-events:none;
+  }
+
+  /* ---------- top monitor bar / nav ---------- */
+  header.monitor-bar{
+    position: sticky; top:0; z-index: 100;
+    background: rgba(11,16,38,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,201,4,0.18);
+  }
+  .bar-inner{
+    max-width: 1180px; margin: 0 auto;
+    display:flex; align-items:center; justify-content: space-between;
+    padding: 0.85rem 1.5rem;
+  }
+  .brand{
+    display:flex; align-items:center; gap:0.6rem;
+    font-family: var(--display); font-weight:700; letter-spacing: 0.02em;
+    color: var(--ink); font-size: 1.05rem; text-decoration:none;
+  }
+  .brand .dot{
+    width:10px; height:10px; border-radius:50%;
+    background: var(--green);
+    box-shadow: 0 0 8px 2px rgba(0,230,118,0.7);
+    animation: blink 1.6s ease-in-out infinite;
+  }
+  @keyframes blink{ 0%,100%{ opacity:1;} 50%{ opacity:0.35;} }
+
+  nav.crumbs{ display:flex; gap:1.4rem; flex-wrap: wrap; }
+  nav.crumbs a{
+    color: var(--ink-dim); text-decoration:none;
+    font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0; border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav.crumbs a:hover{ color: var(--green); border-color: var(--green); }
+
+  /* ---------- layout ---------- */
+  main{ max-width: 1180px; margin: 0 auto; padding: 0 1.5rem; }
+  section{ padding: 4.5rem 0; scroll-margin-top: 5rem; }
+  section + section{ border-top: 1px dashed rgba(136,146,176,0.15); }
+
+  .eyebrow{
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--green); margin: 0 0 0.6rem 0;
+    display:flex; align-items:center; gap:0.5rem;
+  }
+  .eyebrow::before{ content:""; width:18px; height:1px; background: var(--green); display:inline-block; }
+
+  h1,h2,h3{ font-family: var(--display); margin: 0 0 0.6rem 0; color: var(--ink); }
+  h2{ font-size: 1.9rem; }
+  .section-heading{ color: var(--gold); }
+
+  p{ color: var(--ink-dim); max-width: 62ch; }
+  .lead{ color: var(--ink); font-size: 1.08rem; }
+
+  /* ---------- hero ---------- */
+  .hero{
+    padding: 5.5rem 0 4rem 0;
+    display:grid; grid-template-columns: 1.1fr 0.9fr; gap: 2.5rem; align-items:center;
+  }
+  .hero h1{ font-size: clamp(2.1rem, 4vw, 3.1rem); line-height:1.12; }
+  .hero .pitch{ font-size: 1.1rem; color: var(--ink); max-width: 46ch; }
+  .status-row{ display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:1.6rem; }
+  .chip{
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing:0.05em;
+    padding: 0.35rem 0.7rem; border-radius: 999px;
+    border: 1px solid currentColor;
+    display:inline-flex; align-items:center; gap:0.4rem;
+  }
+  .chip.on{ color: var(--green); }
+  .chip.warn{ color: var(--gold); }
+  .chip .led{ width:7px; height:7px; border-radius:50%; background: currentColor; box-shadow: 0 0 6px currentColor; }
+
+  .cta-row{ display:flex; gap:0.9rem; margin-top: 1.8rem; flex-wrap: wrap; }
+  .btn{
+    font-family: var(--mono); font-size: 0.82rem; text-decoration:none;
+    padding: 0.7rem 1.2rem; border-radius: 6px; letter-spacing: 0.03em;
+  }
+  .btn.primary{ background: var(--green); color: var(--navy-deep); font-weight:600; }
+  .btn.ghost{ border: 1px solid rgba(255,201,4,0.4); color: var(--gold); }
+
+  /* ECG signature element */
+  .ecg-wrap{
+    position: relative;
+    background: var(--navy);
+    border: 1px solid rgba(0,230,118,0.25);
+    border-radius: 10px;
+    padding: 1.2rem 1rem 0.9rem 1rem;
+    box-shadow: inset 0 0 40px rgba(0,230,118,0.05);
+  }
+  .ecg-wrap .readout{
+    display:flex; justify-content: space-between; align-items:baseline;
+    font-family: var(--mono); margin-bottom: 0.6rem;
+  }
+  .ecg-wrap .bpm{ color: var(--green); font-size: 2.1rem; font-weight:600; text-shadow: 0 0 12px rgba(0,230,118,0.5); }
+  .ecg-wrap .bpm-label{ color: var(--ink-dim); font-size: 0.68rem; letter-spacing:0.12em; text-transform:uppercase; }
+  svg.ecg{ width:100%; height: 120px; display:block; }
+  .ecg-line{
+    fill:none; stroke: var(--green); stroke-width:2;
+    stroke-linecap:round; stroke-linejoin:round;
+    filter: drop-shadow(0 0 5px rgba(0,230,118,0.8));
+    stroke-dasharray: 900; stroke-dashoffset: 900;
+    animation: draw 3.2s linear infinite;
+  }
+  @keyframes draw{ to{ stroke-dashoffset: -900; } }
+  .grid-bg{ stroke: rgba(255,201,4,0.08); stroke-width:1; }
+
+  @media (prefers-reduced-motion: reduce){
+    .ecg-line, .brand .dot{ animation: none; }
+  }
+
+  /* ---------- overview two-col ---------- */
+  .two-col{ display:grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+  ul.spec-list{ list-style:none; padding:0; margin: 1.2rem 0 0 0; }
+  ul.spec-list li{
+    font-family: var(--mono); font-size: 0.85rem; color: var(--ink);
+    padding: 0.55rem 0; border-bottom: 1px solid rgba(136,146,176,0.12);
+    display:flex; justify-content: space-between; gap: 1rem;
+  }
+  ul.spec-list li span.k{ color: var(--ink-dim); }
+  ul.spec-list li span.v{ color: var(--green); text-align:right; }
+
+  /* ---------- placeholder media blocks ---------- */
+  .media-slot{
+    aspect-ratio: 16/9; border-radius: 10px;
+    border: 1px dashed rgba(255,201,4,0.35);
+    background: repeating-linear-gradient(45deg, rgba(255,201,4,0.03) 0 10px, transparent 10px 20px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem;
+    color: var(--ink-dim); text-align:center; padding: 1.5rem;
+  }
+  .media-slot .tag{
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing:0.1em;
+    color: var(--gold); text-transform: uppercase;
+  }
+  .media-slot code{ color: var(--green); font-family: var(--mono); font-size:0.78rem; }
+
+  .diagram-slot{
+    aspect-ratio: 16/10;
+  }
+
+  /* ---------- task table ---------- */
+  table.vitals{
+    width:100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.86rem;
+    margin-top: 1.5rem;
+  }
+  table.vitals caption{ text-align:left; color: var(--ink-dim); font-size:0.78rem; margin-bottom:0.6rem; }
+  table.vitals thead th{
+    text-align:left; color: var(--navy-deep); background: var(--gold);
+    padding: 0.65rem 1rem; font-size: 0.7rem; letter-spacing:0.1em; text-transform:uppercase;
+  }
+  table.vitals thead th:first-child{ border-top-left-radius:6px; }
+  table.vitals thead th:last-child{ border-top-right-radius:6px; }
+  table.vitals tbody td{
+    padding: 0.65rem 1rem; border-bottom: 1px solid rgba(136,146,176,0.15);
+    color: var(--ink);
+  }
+  table.vitals tbody tr:hover{ background: rgba(0,230,118,0.05); }
+  table.vitals tbody td[data-editable]::after{
+    content: " ⟵ fill in"; color: var(--ink-dim); font-size:0.72rem; font-style:italic;
+  }
+  .prio-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:0.5rem; }
+
+  /* ---------- hazard cards ---------- */
+  .hazard-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:1.2rem; margin-top:1.5rem; }
+  .hazard-card{ padding: 1.3rem 1.3rem 1.2rem 1.3rem; }
+  .hazard-card .sev{
+    font-family: var(--mono); font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase;
+    color: var(--red); border: 1px solid var(--red); padding:0.2rem 0.5rem; border-radius:4px;
+    display:inline-block; margin-bottom:0.7rem;
+  }
+  .hazard-card h3{ font-size: 1.05rem; color: var(--ink); }
+  .hazard-card p{ font-size: 0.92rem; }
+
+  /* ---------- reflection ---------- */
+  .reflection-panel{ padding: 1.8rem 2rem; margin-top:1.2rem; }
+
+  /* ---------- readme details ---------- */
+  details.readme{
+    padding: 1.2rem 1.5rem; margin-top: 1.2rem;
+  }
+  details.readme summary{
+    cursor:pointer; font-family: var(--mono); color: var(--gold);
+    font-size: 0.85rem; letter-spacing:0.05em; text-transform:uppercase;
+    list-style:none;
+  }
+  details.readme summary::-webkit-details-marker{ display:none; }
+  details.readme summary::before{ content:"▸ "; color: var(--green); }
+  details.readme[open] summary::before{ content:"▾ "; }
+  details.readme .readme-body{ margin-top:1rem; }
+  details.readme pre{
+    background: var(--navy-deep); border:1px solid rgba(136,146,176,0.15);
+    border-radius:6px; padding:1rem; overflow-x:auto; font-family: var(--mono); font-size:0.8rem;
+    color: var(--ink);
+  }
+
+  footer{
+    text-align:center; padding: 2.5rem 1.5rem 3rem 1.5rem;
+    color: var(--ink-dim); font-family: var(--mono); font-size:0.75rem; letter-spacing:0.05em;
+  }
+
+  @media (max-width: 860px){
+    .hero{ grid-template-columns: 1fr; }
+    .two-col{ grid-template-columns: 1fr; }
+    nav.crumbs{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="monitor-bar">
+  <div class="bar-inner">
+    <a href="#hero" class="brand"><span class="dot"></span> PULSE/OS</a>
+    <nav class="crumbs">
+      <a href="#overview">Overview</a>
+      <a href="#demo">Demo</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#tasks">Tasks</a>
+      <a href="#hazards">Hazards</a>
+      <a href="#reflection">Reflection</a>
+      <a href="#readme">Readme</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ================= HERO ================= -->
+  <section id="hero" class="hero">
+    <div>
+      <p class="eyebrow">RTOS / Embedded Systems Capstone &middot; Theme: Medical</p>
+      <h1>A dual-core ESP32 heart monitor that never misses a beat &mdash; even under load.</h1>
+      <p class="pitch">Four rate-monotonic FreeRTOS tasks share one core to sample, analyze, and alarm on cardiac data in real time, while the second core stays free to report on it.</p>
+      <div class="status-row">
+        <span class="chip on"><span class="led"></span>ECG SAMPLING</span>
+        <span class="chip on"><span class="led"></span>SCHEDULER NOMINAL</span>
+        <span class="chip warn"><span class="led"></span>WCET LOGGING</span>
+      </div>
+      <div class="cta-row">
+        <a href="#demo" class="btn primary">Watch the demo</a>
+        <a href="#readme" class="btn ghost">Read the README</a>
+      </div>
+    </div>
+
+    <div class="ecg-wrap">
+      <div class="readout">
+        <div>
+          <div class="bpm">72</div>
+          <div class="bpm-label">bpm &middot; lead II</div>
+        </div>
+        <div class="bpm-label" style="text-align:right;">CORE 1<br>4 tasks active</div>
+      </div>
+      <svg class="ecg" viewBox="0 0 900 120" preserveAspectRatio="none">
+        <line x1="0" y1="20" x2="900" y2="20" class="grid-bg"/>
+        <line x1="0" y1="60" x2="900" y2="60" class="grid-bg"/>
+        <line x1="0" y1="100" x2="900" y2="100" class="grid-bg"/>
+        <path class="ecg-line" d="M0,60 L60,60 L75,60 L85,20 L95,100 L105,40 L115,60 L180,60
+          L240,60 L255,60 L265,20 L275,100 L285,40 L295,60 L360,60
+          L420,60 L435,60 L445,20 L455,100 L465,40 L475,60 L540,60
+          L600,60 L615,60 L625,20 L635,100 L645,40 L655,60 L720,60
+          L780,60 L795,60 L805,20 L815,100 L825,40 L835,60 L900,60"/>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ================= OVERVIEW ================= -->
+  <section id="overview">
+    <p class="eyebrow">Overview</p>
+    <h2 class="section-heading">What this project is</h2>
+    <div class="two-col">
+      <div>
+        <p class="lead">PULSE/OS simulates the real-time software backbone of a bedside cardiac monitor. It runs four independent FreeRTOS tasks &mdash; ECG sampling, arrhythmia detection, alarm dispatch, and housekeeping/logging &mdash; all pinned to one core of a dual-core ESP32, scheduled by fixed priority under a rate-monotonic policy.</p>
+        <p>The second core is reserved entirely for reporting: a lightweight monitor (web dashboard or serial console, selectable at compile time) so instrumentation never perturbs the timing of the tasks it's measuring. Every task is wrapped in a worst-case execution time (WCET) probe, so scheduling decisions can be defended with real numbers, not guesses.</p>
+      </div>
+      <div>
+        <ul class="spec-list">
+          <li><span class="k">Target board</span><span class="v">ESP32 (dual-core, Wokwi sim)</span></li>
+          <li><span class="k">RTOS</span><span class="v">FreeRTOS (ESP-IDF)</span></li>
+          <li><span class="k">Scheduling policy</span><span class="v">Fixed-priority, rate-monotonic</span></li>
+          <li><span class="k">Core isolation</span><span class="v">Tasks: Core 1 &middot; Monitor: Core 0</span></li>
+          <li><span class="k">Task count</span><span class="v">4</span></li>
+          <li><span class="k">Instrumentation</span><span class="v">Per-task WCET + heartbeat counters</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DEMO ================= -->
+  <section id="demo">
+    <p class="eyebrow">Demo</p>
+    <h2 class="section-heading">See it running</h2>
+    <p>Wokwi simulation and/or walkthrough video goes here &mdash; showing the four tasks running, the live monitor updating, and a preemption event captured on the serial trace.</p>
+    <div class="media-slot">
+      <span class="tag">Video / Wokwi embed placeholder</span>
+      <p style="margin:0; max-width:46ch;">Drop in a YouTube embed or Wokwi project iframe here.</p>
+      <code>&lt;iframe src="https://www.youtube.com/embed/YOUR_VIDEO_ID"&gt;&lt;/iframe&gt;</code>
+    </div>
+
+    <div class="panel" style="margin-top:1.5rem; padding:1.2rem;">
+      <p class="eyebrow" style="margin-bottom:0.8rem;">Serial trace</p>
+      <img src="WCETRun.jpg"
+           alt="Serial console output showing the 4-task monitor table, per-task heartbeats, and per-task WCET readings"
+           style="width:100%; border-radius:6px; display:block; border:1px solid rgba(0,230,118,0.2);">
+      <p style="margin-top:0.8rem; font-size:0.85rem;">Live serial output: heartbeat counters climbing monotonically per task, plus periodic WCET-max logging for A/B/C/D &mdash; confirms none of the four tasks is starved.</p>
+    </div>
+  </section>
+
+  <!-- ================= ARCHITECTURE ================= -->
+  <section id="architecture">
+    <p class="eyebrow">Architecture</p>
+    <h2 class="section-heading">System diagram</h2>
+    <p>Dual-core layout, task-to-core pinning, priority levels, and the data path from sensor sample to alarm dispatch to the monitor. Swap the placeholder below for your diagram image (draw.io / Excalidraw / hand-drawn photo all work).</p>
+    <div class="media-slot diagram-slot">
+      <span class="tag">System diagram placeholder</span>
+      <p style="margin:0; max-width:46ch;">Replace with your architecture image, e.g.</p>
+      <code>&lt;img src="architecture.png" alt="System architecture diagram"&gt;</code>
+    </div>
+  </section>
+
+  <!-- ================= TASK TABLE ================= -->
+  <section id="tasks">
+    <p class="eyebrow">Task Table</p>
+    <h2 class="section-heading">Scheduling summary</h2>
+    <p>Rate-monotonic assignment: higher sampling rate → higher priority. WCET measured on-device via <code>MEASURE_WCET</code>, with a 30% safety margin applied against each task's deadline.</p>
+    <table class="vitals">
+      <caption>Priorities are FreeRTOS task priorities (higher number = higher priority). All four tasks pinned to Core 1.</caption>
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Function</th>
+          <th>Period</th>
+          <th>Priority</th>
+          <th>Core</th>
+          <th>WCET measured (&micro;s)</th>
+          <th>WCET + 30% margin (&micro;s)</th>
+          <th>Deadline</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="prio-dot" style="background:var(--green)"></span>A</td>
+          <td>ECG_Sample</td>
+          <td>10 ms</td>
+          <td>15 (highest)</td>
+          <td>1</td>
+          <td>37</td>
+          <td>48</td>
+          <td>10 ms</td>
+        </tr>
+        <tr>
+          <td><span class="prio-dot" style="background:var(--gold)"></span>B</td>
+          <td>Arrhythmia_Detector</td>
+          <td>20 ms</td>
+          <td>10</td>
+          <td>1</td>
+          <td>324</td>
+          <td>421</td>
+          <td>20 ms</td>
+        </tr>
+        <tr>
+          <td><span class="prio-dot" style="background:var(--gold)"></span>C</td>
+          <td>Alarm_Dispatch</td>
+          <td>40 ms</td>
+          <td>5</td>
+          <td>1</td>
+          <td>4563</td>
+          <td>5932</td>
+          <td>40 ms</td>
+        </tr>
+        <tr>
+          <td><span class="prio-dot" style="background:var(--red)"></span>D</td>
+          <td>Logging</td>
+          <td>100 ms</td>
+          <td>2 (lowest)</td>
+          <td>1</td>
+          <td>28687</td>
+          <td>37293</td>
+          <td>100 ms</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="panel" style="margin-top:1.5rem; padding:1.2rem;">
+      <p class="eyebrow" style="margin-bottom:0.8rem;">Source data</p>
+      <img src="TaskTable.jpg"
+           alt="Raw task table showing period, WCET measured, WCET with 30% margin, deadline, priority, and core for each of the four tasks"
+           style="width:100%; border-radius:6px; display:block; border:1px solid rgba(255,201,4,0.2);">
+    </div>
+  </section>
+
+  <!-- ================= INDUCED FAILURE ================= -->
+  <section id="hazards">
+    <p class="eyebrow">Hazard Analysis</p>
+    <h2 class="section-heading">Induced Failure</h2>
+    <p>Every scheduling choice has a failure mode. To prove the priority assignment actually matters, the highest-priority task's blocking delay was deliberately removed so it never yields &mdash; starving every task at or below it.</p>
+
+    <div class="panel" style="padding: 1.6rem 1.8rem;">
+      <span class="sev">Starvation</span>
+      <h3 style="margin-top:0.4rem;">What was broken, and what happened</h3>
+      <p style="max-width:none;">
+        <!-- Write your explanation here: what you changed to induce the failure,
+             what you expected to happen, and what the monitor/serial trace actually
+             showed (which heartbeats stalled, which kept running, and why). -->
+        Placeholder &mdash; replace this paragraph with your own explanation of the induced-failure test: what was changed, what you predicted, and what the heartbeat counters showed once it ran.
+      </p>
+    </div>
+
+    <div class="panel" style="margin-top:1.5rem; padding:1.2rem;">
+      <p class="eyebrow" style="margin-bottom:0.8rem;">Evidence</p>
+      <img src="InducedFailure.jpg"
+           alt="Serial trace or monitor output showing a heartbeat counter stalling after the induced failure was introduced"
+           style="width:100%; border-radius:6px; display:block; border:1px solid rgba(184,24,41,0.35);">
+    </div>
+  </section>
+
+  <!-- ================= REFLECTION ================= -->
+  <section id="reflection">
+    <p class="eyebrow">Final Reflection</p>
+    <h2 class="section-heading">What this taught me</h2>
+    <div class="panel reflection-panel">
+      <p>Placeholder for your closing reflection: what surprised you about rate-monotonic scheduling in practice, what you'd change about the priority assignment with more time, and how measuring real WCET numbers changed (or confirmed) your design decisions.</p>
+    </div>
+  </section>
+
+  <!-- ================= README ================= -->
+  <section id="readme">
+    <p class="eyebrow">README</p>
+    <h2 class="section-heading">Project README</h2>
+    <details class="readme">
+      <summary>Expand full README</summary>
+      <div class="readme-body">
+        <p>Paste your full README content here, or link out to it in the repo:</p>
+        <pre>See README.md in this repository for build instructions,
+priority-assignment rationale, and the full WCET trace.</pre>
+        <p><a href="README.md">Open README.md directly →</a></p>
+      </div>
+    </details>
+  </section>
+
+</main>
+
+<footer>
+  PULSE/OS &middot; ESP32 dual-core FreeRTOS capstone &middot; built for GitHub Pages
+</footer>
+
+</body>
+</html>
