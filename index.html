@@ -330,8 +330,10 @@
     <h2 class="section-heading">What this project is</h2>
     <div class="two-col">
       <div>
-        <p class="lead">PULSE/OS simulates the real-time software backbone of a bedside cardiac monitor. It runs four independent FreeRTOS tasks &mdash; ECG sampling, arrhythmia detection, alarm dispatch, and housekeeping/logging &mdash; all pinned to one core of a dual-core ESP32, scheduled by fixed priority under a rate-monotonic policy.</p>
-        <p>The second core is reserved entirely for reporting: a lightweight monitor (web dashboard or serial console, selectable at compile time) so instrumentation never perturbs the timing of the tasks it's measuring. Every task is wrapped in a worst-case execution time (WCET) probe, so scheduling decisions can be defended with real numbers, not guesses.</p>
+        <p class="lead">This final App is a medical-themed FreeRTOS project that shows how multiple tasks with different priorities can work together. The overall theme to this project is medical tasks, using four tasks representing ECG sampdling, arrhythmia detection, alarm dispatch, and system logging. Each task runs at a different rate depending on how important and time-sensitive it is.
+For example, the ECG sampling task has the highest priority because it needs to collect patient data often and without much delay. Arrhythmia detection also has a high priority because it checks for unusual heart activity. Alarm dispatch runs at a lower priority, while the logging task has the lowest priority because recording system information is less urgent than monitoring the patient.
+The main purpose of the project is to demonstrate preemption. Preemption happens when a higher-priority task becomes ready while a lower-priority task is still running. FreeRTOS pauses the lower-priority task, runs the more important task, and then allows the lowerd-priority task to acontinue afterward. Examples of this are shown within the demo video.
+The program also keeps track of heartbeats and execution times for each task. The heartbeats show that the tasks are still running, while the timestamps help show when one task interrupts another. Overall, the project demonstrates how FreeRTOS can prioritize important medical tasks while still allowing less urgent background tasks to run..</p>
       </div>
       <div>
         <ul class="spec-list">
